@@ -15,7 +15,6 @@
     <properties>
         <spark.version>2.1.0</spark.version>
         <jedis.version>2.8.2</jedis.version>
-        <fastjson.version>1.2.14</fastjson.version>
         <java.version>1.8</java.version>
         <scala.version>2.11.12</scala.version>
         <scala.binary.version>2.11</scala.binary.version>
@@ -49,12 +48,6 @@
             <groupId>org.apache.hbase</groupId>
             <artifactId>hbase-client</artifactId>
             <version>${hbase.version}</version>
-        </dependency>
-
-        <dependency>
-            <groupId>com.alibaba</groupId>
-            <artifactId>fastjson</artifactId>
-            <version>${fastjson.version}</version>
         </dependency>
 
         <!-- Mysql Driver -->
