@@ -1,10 +1,10 @@
 package com.aura.task4
 
+import com.aura.task4.db.DBHelper
 import org.apache.hadoop.fs.Path
 import org.apache.hadoop.hdfs.HdfsConfiguration
 import org.apache.spark.{HashPartitioner, SparkConf, SparkContext}
-import com.aura.task4.util.ConnectionPool
-import com.aura.task4.util.DateTimeUtil.{long2string, getCurrentTime}
+import com.aura.task4.util.DateTimeUtil.{getCurrentTime, long2string}
 
 object CateRanking {
 
@@ -62,12 +62,12 @@ object CateRanking {
 
     //将数据按partition写入mysql
     results.foreachPartition(partition => {
-      val conn = new ConnectionPool().getConnection()
+      val conn = DBHelper.getConnection()
       while (partition.hasNext){
-        var p = partition.next()
+        val p = partition.next()
         val date = p._1
         val cates = p._2
-        var sql = new StringBuilder("INSERT INTO cate_ranking ( date, cate_id, nums ) VALUES ")
+        val sql = new StringBuilder("INSERT INTO cate_ranking ( date, cate_id, nums ) VALUES ")
         for (elem <- cates) {
           sql.append("('")
           sql.append(date)

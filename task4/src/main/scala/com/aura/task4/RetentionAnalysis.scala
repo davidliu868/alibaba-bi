@@ -23,7 +23,7 @@ object RetentionAnalysis {
 
     val TABLE_NAME = "retention_analysis"
 
-    val conf = new SparkConf().setAppName("CateRanking")
+    val conf = new SparkConf().setAppName("RetentionAnalysis")
 
     var inputDate = "2017-04-22"
 
