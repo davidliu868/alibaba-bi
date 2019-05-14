@@ -1,10 +1,9 @@
 package com.aura.task4
 
 import org.apache.spark.{SparkConf, SparkContext}
-import com.aura.task4.util.DateTimeUtil.{getCurrentTime, long2string, string2long}
-import org.apache.hadoop.fs.Path
-import org.apache.hadoop.hdfs.HdfsConfiguration
-
+import com.aura.task4.util.DateTimeUtil.{long2string, string2long, stringAddDay}
+import org.apache.hadoop.hbase.{HBaseConfiguration, TableName}
+import org.apache.hadoop.hbase.client.{ConnectionFactory, Put}
 
 /**
   * 留存分析
@@ -20,8 +19,9 @@ object RetentionAnalysis {
 
   def main(args: Array[String]): Unit = {
 
-    var inputFile = "hdfs://hadoop:9000/bi/behavior_log_test"
-    var outputFile = "hdfs://hadoop:9000/bi/behavior_out/retenrion/"
+    var inputFile = "hdfs://hadoop:9000/bi/behavior_log"
+
+    val TABLE_NAME = "retention_analysis"
 
     val conf = new SparkConf().setAppName("CateRanking")
 
@@ -44,7 +44,7 @@ object RetentionAnalysis {
     val endDate = string2long("2017-05-14", "yyyy-MM-dd")
 
     //1. 过滤数据，行为是浏览的，日期是给定日期之后的, 5月14之前的
-    val results = behaviorRDD
+    behaviorRDD
       .filter(_.contains("pv"))
       .filter(s => {
         val splits = s.split(",")
@@ -56,37 +56,60 @@ object RetentionAnalysis {
       })
       .groupByKey()
       .foreachPartition( partition=> {
+        // 与hbase建立连接
+
+        val configuration = HBaseConfiguration.create()
+        configuration.set("hbase.zookeeper.quorum", "hadoop:2181")
+        configuration.set("zookeeper.znode.parent", "/hbase")
+
+        val connection = ConnectionFactory.createConnection(configuration)
+        val table = connection.getTable(TableName.valueOf(TABLE_NAME))
+
+
         while (partition.hasNext){
           val cate = partition.next()
+
           val cateId = cate._1// 类目ID
 
+          //按日期分组
           val dateUsers = cate._2
+          val dateUsersMap = dateUsers.groupBy(_._1)
 
-          var map:Map[String, String] = Map()
-          dateUsers.foreach(d => {
-            map += (d._1 -> d._2)
+          dateUsersMap.keys.foreach(m => {
+
+            //rowkey 日期-类目ID
+            val rowKey = "%s-%06d".format(m, cateId.toInt)
+
+            val put = new Put(rowKey.getBytes())
+
+            //该日期m下，用户的数量
+            val users = dateUsersMap(m).map(_._2).toList.distinct
+            println("日期："+m+" 用户IDS:"+users.toString())
+
+            put.addColumn("f1".getBytes(), "d0".getBytes(), users.size.toString.getBytes)
+
+            //进行22天循环
+
+            for (index <- 1 to 22){
+              val indexDate = stringAddDay(m, "yyyy-MM-dd", index)
+              if (dateUsersMap.contains(indexDate)){
+                val indexUsers = dateUsersMap(indexDate).map(_._2).toList.distinct
+                //第n天取交集
+                val tmpIntersect = users.intersect(indexUsers)
+                val column = "d%d".format(index)
+                //index 天的留存
+                put.addColumn("f1".getBytes(), column.getBytes(), tmpIntersect.size.toString.getBytes)
+              }
+            }
+            table.put(put)
           })
-
-          map.keys.foreach( k => {
-            // hbase key 日期加类目，
-          })
-
         }
+
+        if (table != null){
+          table.close()
+        }
+        connection.close()
       })
-
-
-    //获取当前时间
-    val time = getCurrentTime("yyy-MM-dd")
-    outputFile += time;
-    println("outputFile is: "+outputFile)
-    val outpath = new Path(outputFile)
-    val fs = outpath.getFileSystem(new HdfsConfiguration())
-    if (fs.exists(outpath)){
-      fs.delete(outpath, true)
-    }
-    results.saveAsTextFile(outputFile)
-
-
   }
 
 }
