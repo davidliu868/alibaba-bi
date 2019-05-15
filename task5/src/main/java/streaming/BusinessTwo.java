@@ -2,37 +2,63 @@ package streaming;
 
 import com.google.common.collect.Sets;
 import com.typesafe.config.Config;
+import com.typesafe.config.ConfigFactory;
+import dao.JavaDBDao;
+import db.DBHelper;
 import entry.AdsEntry;
 import kafka.serializer.StringDecoder;
+import org.apache.spark.SparkConf;
 import org.apache.spark.api.java.JavaPairRDD;
 import org.apache.spark.api.java.JavaRDD;
 import org.apache.spark.api.java.function.Function;
-import org.apache.spark.api.java.function.VoidFunction;
 import org.apache.spark.sql.Dataset;
 import org.apache.spark.sql.Row;
 import org.apache.spark.sql.SparkSession;
-import org.apache.spark.sql.types.StructType;
+import org.apache.spark.streaming.Duration;
+import org.apache.spark.streaming.Durations;
 import org.apache.spark.streaming.api.java.JavaDStream;
 import org.apache.spark.streaming.api.java.JavaPairInputDStream;
+import org.apache.spark.streaming.api.java.JavaStreamingContext;
 import org.apache.spark.streaming.kafka.KafkaUtils;
-import redis.clients.jedis.Jedis;
 import scala.Tuple2;
-import utils.JavaRedisClient;
 
 import java.sql.Connection;
-import java.sql.SQLException;
 import java.util.HashMap;
-import java.util.Iterator;
 import java.util.Map;
 
-public class BusinessTwo extends Business{
-    /**
-     * 广告基本信息的schema
-     */
-    protected StructType ad_feature_schema = new StructType()
-            .add("adgroup_id ", "int", false)
-            .add("customer_id", "int", false);
+public class BusinessTwo {
+    public Config config;
+    public JavaStreamingContext ssc;
+    public static SparkSession instance = null;
+    public static final String PV_HASHKEY = "behavior_pv";
+    //    private static final String CART_HASHKEY = "behavior_cart";
+    public static final String BUY_HASHKEY = "behavior_buy";
 
+    public BusinessTwo() {
+        config = ConfigFactory.parseResources("spark.conf");
+    }
+
+    public static SparkSession getInstance(SparkConf conf) {
+        if (instance == null) {
+            instance = SparkSession.builder().config(conf).getOrCreate();
+        }
+        return instance;
+    }
+    /**
+     * 配置 JavaStreamingContext
+     *
+     * @param config 配置信息
+     * @return JavaStreamingContext
+     */
+    public JavaStreamingContext createStreamingContext(Config config) {
+        SparkConf conf = new SparkConf();
+        conf.setAppName("Java Behavior from kafka Streaming Analysis");
+        conf.set("spark.streaming.stopGracefullyOnShutdown", "true");
+        conf.setMaster("local[2]");
+        Duration batchInterval = Durations.seconds(config.getLong("spark.interval"));
+        JavaStreamingContext ssc = new JavaStreamingContext(conf, batchInterval);
+        return ssc;
+    }
     /**
      * kafka 参数配置 ads 主题
      *
@@ -91,13 +117,13 @@ public class BusinessTwo extends Business{
         //input 读入的流,处理为一个 两表join的DSteam结果流
         JavaDStream<String> stringJavaDStream = input.mapToPair(l -> {
 //           1:adgroup_id：脱敏过的广告单元 ID； 4: noclk：为 1代表没有点击；为 0代表点击； 5:clk：为 0代表没有点击；为 1代表点击
-            return new Tuple2<String, String>(l._2.split("|")[1], l._2.split("|")[4] + "," + l._2.split("|")[5]);
+            return new Tuple2<String, String>(l._2().split("|")[1], l._2().split("|")[4] + "," + l._2().split("|")[5]);
         }).transform(new Function<JavaPairRDD<String, String>, JavaRDD<String>>() {
             @Override
             public JavaRDD<String> call(JavaPairRDD<String, String> jpRDD) throws Exception {
                 JavaPairRDD<String, Tuple2<String, String>> pairRDD = (JavaPairRDD<String, Tuple2<String, String>>) jpRDD.join(ad_featureRDD);
                 JavaRDD<String> stringJavaRDD = pairRDD.map(line -> {
-                    String returnStr = line._1 + "," + line._2._1.split(",")[0] + line._2._1.split(",")[1] + line._2._2;
+                    String returnStr = line._1() + "," + line._2()._1().split(",")[0] + line._2()._1().split(",")[1] + line._2()._2();
                     return returnStr;
                 });
                 return stringJavaRDD;
@@ -128,16 +154,28 @@ public class BusinessTwo extends Business{
             Dataset<Row> wordCountsDataFrame = spark.sql("select customer_id, count(adgroup_id) as total from totleClick group by customer_id where nonclk=0 and clk=1");
 //            System.out.printf("========= %d =========\n", time.milliseconds());
             wordCountsDataFrame.foreachPartition(rows -> {
-                Jedis jedis = JavaRedisClient.get().getResource();
+//                Jedis jedis = JavaRedisClient.get().getResource();
+                Connection conn = DBHelper.getConnection();
                 rows.forEachRemaining(row -> {
                     try {
-                        jedis.hincrBy(PV_HASHKEY, row.getString(0), row.getInt(1));
+//                        jedis.hincrBy(PV_HASHKEY, row.getString(0), row.getInt(1));
+                        JavaDBDao.saveCustomerClickTotal(conn, Integer.parseInt(row.getString(0)),row.getInt(1));
                     } catch (Exception e) {
                         e.printStackTrace();
                     }
                 });
+                conn.close();
             });
         });
+    }
+    /**
+     * 获取ad_feature表信息
+     *
+     * @return
+     */
+    public JavaRDD<String> getAd_featureHdfs() {
+        JavaRDD<String> stringJavaRDD = ssc.sparkContext().textFile("hdfs://192.168.10.132:9000/tb_data/ad_feature");
+        return stringJavaRDD;
     }
 
     public static void main(String[] args) {

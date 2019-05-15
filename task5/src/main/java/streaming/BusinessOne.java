@@ -2,25 +2,64 @@ package streaming;
 
 import com.google.common.collect.Sets;
 import com.typesafe.config.Config;
+import com.typesafe.config.ConfigFactory;
+import dao.JavaDBDao;
+import db.DBHelper;
 import kafka.serializer.StringDecoder;
+import org.apache.spark.SparkConf;
 import org.apache.spark.api.java.JavaPairRDD;
 import org.apache.spark.api.java.JavaRDD;
 import org.apache.spark.api.java.function.Function;
 import org.apache.spark.api.java.function.Function2;
 import org.apache.spark.api.java.function.VoidFunction;
+import org.apache.spark.sql.SparkSession;
+import org.apache.spark.streaming.Duration;
+import org.apache.spark.streaming.Durations;
 import org.apache.spark.streaming.api.java.JavaDStream;
 import org.apache.spark.streaming.api.java.JavaPairDStream;
 import org.apache.spark.streaming.api.java.JavaPairInputDStream;
+import org.apache.spark.streaming.api.java.JavaStreamingContext;
 import org.apache.spark.streaming.kafka.KafkaUtils;
-import redis.clients.jedis.Jedis;
 import scala.Tuple2;
-import utils.JavaRedisClient;
 
+import java.sql.Connection;
 import java.util.HashMap;
 import java.util.Iterator;
 import java.util.Map;
 
-public class BusinessOne extends Business {
+public class BusinessOne {
+    public Config config;
+    public JavaStreamingContext ssc;
+    public static SparkSession instance = null;
+    public static final String PV_HASHKEY = "behavior_pv";
+    //    private static final String CART_HASHKEY = "behavior_cart";
+    public static final String BUY_HASHKEY = "behavior_buy";
+
+    public BusinessOne() {
+        config = ConfigFactory.parseResources("spark.conf");
+    }
+
+    public static SparkSession getInstance(SparkConf conf) {
+        if (instance == null) {
+            instance = SparkSession.builder().config(conf).getOrCreate();
+        }
+        return instance;
+    }
+    /**
+     * 配置 JavaStreamingContext
+     *
+     * @param config 配置信息
+     * @return JavaStreamingContext
+     */
+    public JavaStreamingContext createStreamingContext(Config config) {
+        SparkConf conf = new SparkConf();
+        conf.setAppName("Java Behavior from kafka Streaming Analysis");
+        conf.set("spark.streaming.stopGracefullyOnShutdown", "true");
+        conf.setMaster("local[2]");
+        Duration batchInterval = Durations.seconds(config.getLong("spark.interval"));
+        JavaStreamingContext ssc = new JavaStreamingContext(conf, batchInterval);
+        return ssc;
+    }
     /**
      * kafka 参数配置  bebavior主题
      *
@@ -70,7 +109,7 @@ public class BusinessOne extends Business {
         //每个商品类目实时浏览次数
         statistics_pv(input);
         //和实时购买总额
-        statistics_totalPrice(input);
+//        statistics_totalPrice(input);
     }
 
     /**
@@ -128,16 +167,19 @@ public class BusinessOne extends Business {
                 totlePriceRDD.foreachPartition(new VoidFunction<Iterator<String>>() {
                     @Override
                     public void call(Iterator<String> stringIterator) throws Exception {
-                        Jedis jedis = JavaRedisClient.get().getResource();
+//                        Jedis jedis = JavaRedisClient.get().getResource();
+                        Connection conn = DBHelper.getConnection();
                         while (stringIterator.hasNext()) {
                             try {
                                 String[] split = stringIterator.next().split(",");
-                                //TODO 发送到redis，可以修改为保存到mysql
-                                jedis.hincrBy(BUY_HASHKEY, split[0], Integer.parseInt(split[1]));
+                                // 发送到redis，可以修改为保存到mysql
+//                                jedis.hincrBy(BUY_HASHKEY, split[0], Integer.parseInt(split[1]));
+                                JavaDBDao.saveCateBuyTotalPrice(conn, Integer.parseInt(split[0].split(":")[0]), Integer.parseInt(split[0].split(":")[1]), Double.parseDouble(split[1].toString()));
                             } catch (Exception e) {
                                 System.out.println("error:" + e);
                             }
                         }
+                        conn.close();
                     }
                 });
             }
@@ -147,36 +189,77 @@ public class BusinessOne extends Business {
     //分别统计每个品牌商品类目实时浏览次数--pv
     private void statistics_pv(JavaPairInputDStream<String, String> input) {
         JavaPairDStream<String, Integer> pv =
-                input.filter(x -> x._2.split("|")[1].contentEquals("pv"))
+                input.filter(x -> x._2().split("|").length > 1)
+                        .filter(x -> x._2().split("|")[1].contains("pv"))
 //                .repartition(60)//没有coalesce TODO 测试？？？
                         .mapToPair(k -> {
                             String cate_brand = "";
-                            String[] pv_list = k._2.split("|");
+                            String[] pv_list = k._2().split("|");
                             if (pv_list.length == 4)
                                 cate_brand = pv_list[2] + ":" + pv_list[3];
+                            System.out.println("cate_brand= "+cate_brand);
                             return new Tuple2<>(cate_brand, 1);
                         }).reduceByKey((x, y) -> x + y);
-
-        pv.foreachRDD(new VoidFunction<JavaPairRDD<String, Integer>>() {
+//        pv.foreachRDD(rdd -> {
+//            rdd.foreachPartition(partitions -> {
+////                Connection conn = DBHelper.getConnection();
+//                while (partitions.hasNext()) {
+//                    System.out.println("1::::"+partitions.next()._1()+",2:::"+partitions.next()._2.toString());
+//                }
+//            });
+//        });
+        /*pv.foreachRDD(new VoidFunction<JavaPairRDD<String, Integer>>() {
             @Override
             public void call(JavaPairRDD<String, Integer> rdd) throws Exception {
                 rdd.foreachPartition(new VoidFunction<Iterator<Tuple2<String, Integer>>>() {
                     @Override
                     public void call(Iterator<Tuple2<String, Integer>> partitionOfRecords) throws Exception {
-                        Jedis jedis = JavaRedisClient.get().getResource();
+//                        Jedis jedis = JavaRedisClient.get().getResource();
+//                        Connection conn = DBHelper.getConnection();
                         while (partitionOfRecords.hasNext()) {
                             try {
                                 Tuple2<String, Integer> pv = partitionOfRecords.next();
-                                //TODO 发送到redis，可以修改为保存到mysql
-                                jedis.hincrBy(PV_HASHKEY, pv._1(), Integer.parseInt(pv._2().toString()));
+                                // 发送到redis，可以修改为保存到mysql
+//                                jedis.hincrBy(PV_HASHKEY, pv._1(), Integer.parseInt(pv._2().toString()));
+                                //cate,brand,count
+//                                JavaDBDao.savePvCountResult(conn, Integer.parseInt(pv._1().split(":")[0]), Integer.parseInt(pv._1.split(":")[1]), Integer.parseInt(pv._2().toString()));
+                                System.out.println(pv._1().split(":")[0].toString()+pv._1().split(":")[1].toString()+"===================================");
                             } catch (Exception e) {
                                 System.out.println("error:" + e);
                             }
                         }
+//                        conn.close();
                     }
                 });
             }
+        });*/
+        pv.foreachRDD(rdd -> {
+            rdd.foreachPartition(partitions -> {
+//                Connection conn = DBHelper.getConnection();
+                while (partitions.hasNext()) {
+                    try {
+                        Tuple2<String, Integer> next = partitions.next();
+                        // 发送到redis，可以修改为保存到mysql
+//                                jedis.hincrBy(PV_HASHKEY, pv._1(), Integer.parseInt(pv._2().toString()));
+                        //cate,brand,count
+//                                JavaDBDao.savePvCountResult(conn, Integer.parseInt(next._1().split(":")[0]), Integer.parseInt(next._1.split(":")[1]), Integer.parseInt(next._2().toString()));
+                        System.out.println(next._1().split(":")[0].toString() + next._1().split(":")[1].toString() + "===================================");
+                    } catch (Exception e) {
+                        System.out.println("error:" + e);
+                    }
+                }
+            });
         });
+    }
+
+    /**
+     * 获取ad_feature表信息
+     *
+     * @return
+     */
+    public JavaRDD<String> getAd_featureHdfs() {
+        JavaRDD<String> stringJavaRDD = ssc.sparkContext().textFile("hdfs://192.168.10.132:9000/tb_data/ad_feature");
+        return stringJavaRDD;
     }
 
     public static void main(String[] args) {
