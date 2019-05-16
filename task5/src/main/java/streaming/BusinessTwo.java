@@ -38,12 +38,6 @@ public class BusinessTwo {
         config = ConfigFactory.parseResources("spark.conf");
     }
 
-    public static SparkSession getInstance(SparkConf conf) {
-        if (instance == null) {
-            instance = SparkSession.builder().config(conf).getOrCreate();
-        }
-        return instance;
-    }
     /**
      * 配置 JavaStreamingContext
      *
@@ -106,7 +100,7 @@ public class BusinessTwo {
      */
     private void statisticsByAds(JavaPairInputDStream<String, String> input) {
         //读取广告基本信息，filter有用字段 adgroup_id：脱敏过的广告单元 ID；customer_id:脱敏过的广告主 ID；
-        JavaPairRDD<String, String> ad_featureRDD = (JavaPairRDD<String, String>) getAd_featureHdfs().
+        JavaPairRDD<String, String> ad_featureRDD = getAd_featureHdfs().
                 mapToPair(x -> {
 //                     + "," + x.split(",")[3]
                     return new Tuple2<String, String>(x.split(",")[0], x.split(",")[3]);
@@ -117,21 +111,18 @@ public class BusinessTwo {
         //input 读入的流,处理为一个 两表join的DSteam结果流
         JavaDStream<String> stringJavaDStream = input.mapToPair(l -> {
 //           1:adgroup_id：脱敏过的广告单元 ID； 4: noclk：为 1代表没有点击；为 0代表点击； 5:clk：为 0代表没有点击；为 1代表点击
-            return new Tuple2<String, String>(l._2().split("|")[1], l._2().split("|")[4] + "," + l._2().split("|")[5]);
-        }).transform(new Function<JavaPairRDD<String, String>, JavaRDD<String>>() {
-            @Override
-            public JavaRDD<String> call(JavaPairRDD<String, String> jpRDD) throws Exception {
-                JavaPairRDD<String, Tuple2<String, String>> pairRDD = (JavaPairRDD<String, Tuple2<String, String>>) jpRDD.join(ad_featureRDD);
+            return new Tuple2<String, String>(l._2().split("\\|")[1], l._2().split("\\|")[3] + "," + l._2().split("\\|")[4]);
+        }).transform(jpRDD ->  {
+                JavaPairRDD<String, Tuple2<String, String>> pairRDD = jpRDD.join(ad_featureRDD);
                 JavaRDD<String> stringJavaRDD = pairRDD.map(line -> {
-                    String returnStr = line._1() + "," + line._2()._1().split(",")[0] + line._2()._1().split(",")[1] + line._2()._2();
+                    String returnStr = line._1() + "," + line._2()._1().split(",")[0] +"," +  line._2()._1().split(",")[1] + "," + line._2()._2();
                     return returnStr;
                 });
                 return stringJavaRDD;
-            }
         });
         //整理好的结果集，转换DataFream 用sql查询。
-        stringJavaDStream.foreachRDD((rdd, time) -> {
-            SparkSession spark = getInstance(rdd.context().getConf());
+        stringJavaDStream.foreachRDD(rdd -> {
+            SparkSession spark = SparkSession.builder().config(rdd.context().conf()).getOrCreate();
             JavaRDD<AdsEntry> adsEntry = rdd.map(new Function<String, AdsEntry>() {
                 @Override
                 //TODO 字段没有对应好，修改
@@ -155,16 +146,17 @@ public class BusinessTwo {
 //            System.out.printf("========= %d =========\n", time.milliseconds());
             wordCountsDataFrame.foreachPartition(rows -> {
 //                Jedis jedis = JavaRedisClient.get().getResource();
-                Connection conn = DBHelper.getConnection();
+//                Connection conn = DBHelper.getConnection();
                 rows.forEachRemaining(row -> {
                     try {
 //                        jedis.hincrBy(PV_HASHKEY, row.getString(0), row.getInt(1));
-                        JavaDBDao.saveCustomerClickTotal(conn, Integer.parseInt(row.getString(0)),row.getInt(1));
+//                        JavaDBDao.saveCustomerClickTotal(conn, Integer.parseInt(row.getString(0)),row.getInt(1));
+                        System.out.println("customer_id="+Integer.parseInt(row.getString(0))+",  count(adgroup_id)="+row.getInt(1));
                     } catch (Exception e) {
                         e.printStackTrace();
                     }
                 });
-                conn.close();
+//                conn.close();
             });
         });
     }
@@ -174,7 +166,7 @@ public class BusinessTwo {
      * @return
      */
     public JavaRDD<String> getAd_featureHdfs() {
-        JavaRDD<String> stringJavaRDD = ssc.sparkContext().textFile("hdfs://192.168.10.132:9000/tb_data/ad_feature");
+        JavaRDD<String> stringJavaRDD = ssc.sparkContext().textFile("hdfs://192.168.10.132:9000/tb_data/ad_feature/part-m-00000");
         return stringJavaRDD;
     }
 
