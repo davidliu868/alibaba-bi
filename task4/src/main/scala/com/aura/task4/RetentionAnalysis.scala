@@ -11,8 +11,8 @@ import org.apache.hadoop.hbase.client.{ConnectionFactory, Put}
   * 1. 目标： 分析每个商品类目浏览行为22天的留存率
   * 2. 过滤数据，过滤出行为数据中为浏览的
   * 3. 根据日期-类目-用户ID    key:2018-03-04,1234  value:12,14,5,6,7
-  * 4. 存hdfs 每天的总人数
-  * 5. key: 类目ID   日期
+  * 4. 存hdfs 每天的总人数,d0为第一天  
+  * 5. rowKey: 日期-类目ID
   */
 
 object RetentionAnalysis {
@@ -24,8 +24,6 @@ object RetentionAnalysis {
     val TABLE_NAME = "retention_analysis"
 
     val conf = new SparkConf().setAppName("RetentionAnalysis")
-
-    var inputDate = "2017-04-22"
 
     if(args.length > 0) {
       inputFile = args(0)
@@ -39,16 +37,16 @@ object RetentionAnalysis {
 
     val behaviorRDD = sc.textFile(inputFile)
 
-    val inputDateLong = string2long(inputDate, "yyyy-MM-dd")
+    val startDateLong = string2long("2017-04-22", "yyyy-MM-dd")
 
-    val endDate = string2long("2017-05-14", "yyyy-MM-dd")
+    val endDateLong = string2long("2017-05-14", "yyyy-MM-dd")
 
     //1. 过滤数据，行为是浏览的，日期是给定日期之后的, 5月14之前的
     behaviorRDD
       .filter(_.contains("pv"))
       .filter(s => {
         val splits = s.split(",")
-        splits(1).toInt > (inputDateLong/1000) &&  splits(1).toInt< (endDate/1000)
+        splits(1).toInt > (startDateLong/1000) &&  splits(1).toInt< (endDateLong/1000)
       })
       .map(s => {
         val splits = s.split(",")
