@@ -1,0 +1,39 @@
+spring:
+  application:
+    name: task4web
+  datasource:
+    type: com.zaxxer.hikari.HikariDataSource
+    url: jdbc:mysql://127.0.0.1:3306/bi?useUnicode=true&characterEncoding=utf-8&allowMultiQueries=true
+    username: root
+    password: root
+    driver-class-name: com.mysql.jdbc.Driver
+    hikari:
+      max-lifetime: 1765000
+      maximum-pool-size: 16
+mybatis:
+  type-aliases-package: com.aura.task4web.entity
+  mapper-locations: classpath:mapper/*.xml
+mapper:
+  mappers: com.aura.task4web.util.CommonMapper
+  not-empty: false
+  i-d-e-n-t-i-t-y: MYSQL
+pagehelper:
+  helper-dialect: mysql
+  reasonable: true
+  support-methods-arguments: true
+  params: count=countSql
+
+#端口
+server:
+  port: 9098
+
+#hbase配置
+hbase:
+  zookeeper:
+    quorum: hadoop
+    property:
+      clientPort: 2181
+
+zookeeper:
+  znode:
+    parent: /hbase

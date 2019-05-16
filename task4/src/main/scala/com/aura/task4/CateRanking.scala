@@ -4,7 +4,7 @@ import com.aura.task4.db.DBHelper
 import org.apache.hadoop.fs.Path
 import org.apache.hadoop.hdfs.HdfsConfiguration
 import org.apache.spark.{HashPartitioner, SparkConf, SparkContext}
-import com.aura.task4.util.DateTimeUtil.{getCurrentTime, long2string}
+import com.aura.task4.util.DateTimeUtil.{getCurrentTime, long2string, string2long}
 
 object CateRanking {
 
@@ -22,11 +22,20 @@ object CateRanking {
 
     }
 
-    var sc = new SparkContext(conf)
-    var behaviorRdd = sc.textFile(inputFile)
+    val startDateLong = string2long("2017-04-22", "yyyy-MM-dd")
+
+    val endDateLong = string2long("2017-05-14", "yyyy-MM-dd")
+
+    val sc = new SparkContext(conf)
+    val behaviorRdd = sc.textFile(inputFile)
+
     val results = behaviorRdd
       //过滤行为是浏览的数据
       .filter(_.contains("pv"))
+      .filter(s => {
+        val splits = s.split(",")
+        splits(1).toInt > (startDateLong/1000) &&  splits(1).toInt< (endDateLong/1000)
+      })
       //对数据拆分，key为日期和类目，value为1
       .map(s=> {
         val splits = s.split(",")
