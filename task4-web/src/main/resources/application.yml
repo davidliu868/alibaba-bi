@@ -23,5 +23,17 @@ pagehelper:
   support-methods-arguments: true
   params: count=countSql
 
+#端口
 server:
   port: 9098
+
+#hbase配置
+hbase:
+  zookeeper:
+    quorum: hadoop
+    property:
+      clientPort: 2181
+
+zookeeper:
+  znode:
+    parent: /hbase
