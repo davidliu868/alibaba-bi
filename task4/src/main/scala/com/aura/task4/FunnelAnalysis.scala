@@ -1,7 +1,7 @@
 package com.aura.task4
 
-import com.aura.task4.util.DateTimeUtil.{long2string, getCurrentTime}
-import com.aura.task4.util.ConnectionPool
+import com.aura.task4.db.DBHelper
+import com.aura.task4.util.DateTimeUtil.{getCurrentTime, long2string}
 import org.apache.hadoop.fs.Path
 import org.apache.hadoop.hdfs.HdfsConfiguration
 import org.apache.spark.{SparkConf, SparkContext}
@@ -15,7 +15,7 @@ object FunnelAnalysis {
     var inputFile = "hdfs://hadoop:9000/bi/behavior_log_test"
     var outputFile = "hdfs://hadoop:9000/bi/behavior_out/funnel/"
 
-    val conf = new SparkConf().setAppName("CateRanking")
+    val conf = new SparkConf().setAppName("FunnelAnalysis")
 
     if(args.length > 0) {
       inputFile = args(0)
@@ -48,9 +48,9 @@ object FunnelAnalysis {
 
     //将数据按partition写入mysql
     results.foreachPartition(partition => {
-      val conn = new ConnectionPool().getConnection()
+      val conn = DBHelper.getConnection()
       while (partition.hasNext){
-        var p = partition.next()
+        val p = partition.next()
         val dateAndCate = p._1.split(",")
         val catesFunnel = p._2.split("\\*")
 
@@ -60,7 +60,7 @@ object FunnelAnalysis {
           infoMap += (splits(0) -> splits(1).toInt)
         })
 
-        var sql = new StringBuilder("INSERT INTO funnel_analysis ( date, cate_id, pv, cart, favour, buy ) VALUES ")
+        val sql = new StringBuilder("INSERT INTO funnel_analysis ( date, cate_id, pv, cart, favour, buy ) VALUES ")
 
         sql.append("('")
         sql.append(dateAndCate(0))

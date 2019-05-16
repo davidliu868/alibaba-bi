@@ -1,19 +1,19 @@
 package com.aura.task4.util
 
 import java.text.SimpleDateFormat
-import java.util.Date
+import java.util.{Calendar, Date}
 
 object DateTimeUtil {
 
   def long2string(time: Long): String = {
-    var sdf = new SimpleDateFormat("yyyy-MM-dd")
+    val sdf = new SimpleDateFormat("yyyy-MM-dd")
 
-    return sdf.format(new Date(time))
+    sdf.format(new Date(time))
   }
 
   def getCurrentTime(format: String):String ={
-    var sdf = new SimpleDateFormat(format)
-    return sdf.format(new Date())
+    val sdf = new SimpleDateFormat(format)
+    sdf.format(new Date())
   }
 
   /**
@@ -22,8 +22,16 @@ object DateTimeUtil {
     * @param format
     */
   def string2long(date:String, format:String):Long = {
-    val sdf = new SimpleDateFormat(format);
-    return sdf.parse(date).getTime
+    val sdf = new SimpleDateFormat(format)
+    sdf.parse(date).getTime
+  }
+
+  def stringAddDay(date:String, format:String, day:Int):String = {
+    val sdf = new SimpleDateFormat(format)
+    val calendar = Calendar.getInstance()
+    calendar.setTime( sdf.parse(date))
+    calendar.add(Calendar.DATE, day)
+    sdf.format(calendar.getTime)
   }
 
 }
