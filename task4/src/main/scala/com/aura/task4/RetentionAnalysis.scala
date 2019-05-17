@@ -53,6 +53,7 @@ object RetentionAnalysis {
         (splits(3), (long2string(splits(1).toLong*1000), splits(0)))
       })
       .groupByKey()
+      .repartition(1000)
       .foreachPartition( partition=> {
         // 与hbase建立连接
 
