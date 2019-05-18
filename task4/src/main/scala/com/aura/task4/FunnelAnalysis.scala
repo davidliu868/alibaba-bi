@@ -44,7 +44,7 @@ object FunnelAnalysis {
         val splits = s._1.split(",")
         (splits(0)+","+splits(1), (splits(2)+","+s._2))
       })
-      .reduceByKey(_ + "*"+ _)
+      .reduceByKey("%s*%s".format(_,_))
 
     //将数据按partition写入mysql
     results.foreachPartition(partition => {

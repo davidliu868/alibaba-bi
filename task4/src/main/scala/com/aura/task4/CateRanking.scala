@@ -65,7 +65,8 @@ object CateRanking {
         lists = lists.sortBy(_._2).reverse.take(10)
         new Tuple2[String, Iterable[(String, Int)]](date, lists)
       })
-      .partitionBy(new HashPartitioner(20))
+      .coalesce(10, false)
+//      .partitionBy(new HashPartitioner(20))
       .sortByKey()
 
 
