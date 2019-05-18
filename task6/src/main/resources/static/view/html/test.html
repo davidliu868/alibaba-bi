@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+	<meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1" />
+	<meta name="renderer" content="webkit">
+	<meta charset="utf-8">
+	<title>Test</title>
+	<script type="text/javascript" src="../js/lib/jquery.min.js"></script>
+	<script type="text/javascript" src="../js/common.js"></script>
+	<link rel="stylesheet" type="text/css" href="../css/lib/select2.css">
+	<link rel="stylesheet" type="text/css" href="../css/lib/reset.css">
+	<link rel="stylesheet" type="text/css" href="../css/lib/common.css">
+	<link rel="stylesheet" type="text/css" href="../css/style.css">
+	<script type="text/javascript">
+        $(function(){
+            test();
+        })
+        function test(){
+            $("#warningProductFlowChart").html('');
+            var userIdValue = $("#userId").val();
+            var startDateValue = $("#startDate").val();
+            var endDateValue = $("#endDate").val();
+            var param={"userId": userIdValue,"startDate": startDateValue, "endDate": endDateValue};
+            console.log(param)
+            $.ajax({
+                type:"post",
+                data:param,
+                url:"/view/list",
+                success:function(data){
+                    console.log(data);
+                    var html = template('ywNavCon', data);
+                    $("#warningProductFlowChart").html(html);
+                }
+            })
+        }
+	</script>
+</head>
+<body>
+<header class="header">
+	<div class="logo-title">
+		<a href="./panoramaAnalysis.html">
+			<img src="../images/logo.png">
+			<b>Alibaba-BI</b>
+		</a>
+	</div>
+</header>
+
+
+<div class="main-content main-content-nop main-content-full">
+	<div class="content-box">
+		<div class="cum-nav">
+			<a class="chart-title"><i></i>信息搜索</a>
+		</div>
+		<div class="public-opinion-search">
+
+			<div class="public-opinion-search1">
+
+				<div class="province-list">
+					<span class="label-span label-span-nomargin">用户ID：</span>
+					<input id="userId" type="text" class="province-list-input"/>
+					<span class="label-span label-span-nomargin">开始时间：</span>
+					<input id="startDate"  type="text" class="province-list-input"/>
+					<span class="label-span label-span-nomargin">结束时间：</span>
+					<input id="endDate"  type="text" class="province-list-input"/>
+				</div>
+				<div class="province-list">
+					<a class="set-list-btn province-list-search-btn">搜索</a>
+				</div>
+				<i class="up-down up-down-none"></i>
+			</div>
+		</div>
+
+		<div class="content-box1 marginT20">
+			<table class="panAna-details-table">
+				<thead>
+				<th>用户ID</th>
+				<th>广告ID</th>
+				<th>品牌</th>
+				<th>时间戳</th>
+				</thead>
+
+				<script type="text/html" id="ywNavCon" >
+
+					{{each list as value i}}
+					<tr>
+						<td>{{value.userId}}</td>
+						<td>{{value.adgroupId}}</td>
+						<td>{{value.brand}}</td>
+						<td>{{value.timeStamp}}</td>
+					</tr>
+					{{/each}}
+
+				</script>
+				<tbody id="warningProductFlowChart">
+
+				</tbody>
+			</table>
+		</div>
+		<div class="cf"><div id="page"></div></div>
+	</div>
+</div>
+</body>
+
+<script type="text/javascript" src="../js/lib/pagination/jquery.pagination.js"></script>
+<script type="text/javascript" src="../js/lib/select2.full.min.js"></script>
+<script type="text/javascript" src="../js/echart/echarts.js"></script>
+<script type="text/javascript" src="../js/echart/d3.min.js"></script>
+<script type="text/javascript" src="../js/echart/lineChart.js"></script>
+<script type="text/javascript" src="../js/arttemplate.js"></script>
+<script type="text/javascript" src="../js/public.js"></script>
+</html>
