@@ -17,6 +17,7 @@ import org.apache.spark.sql.SparkSession;
 import org.apache.spark.streaming.Duration;
 import org.apache.spark.streaming.Durations;
 import org.apache.spark.streaming.api.java.JavaDStream;
+import org.apache.spark.streaming.api.java.JavaPairDStream;
 import org.apache.spark.streaming.api.java.JavaPairInputDStream;
 import org.apache.spark.streaming.api.java.JavaStreamingContext;
 import org.apache.spark.streaming.kafka.KafkaUtils;
@@ -38,6 +39,13 @@ public class BusinessTwo {
         config = ConfigFactory.parseResources("spark.conf");
     }
 
+    public static SparkSession getInstance(SparkConf conf) {
+        if (instance == null) {
+            instance = SparkSession.builder().config(conf).getOrCreate();
+        }
+        return instance;
+    }
+
     /**
      * 配置 JavaStreamingContext
      *
@@ -48,11 +56,12 @@ public class BusinessTwo {
         SparkConf conf = new SparkConf();
         conf.setAppName("Java Behavior from kafka Streaming Analysis");
         conf.set("spark.streaming.stopGracefullyOnShutdown", "true");
-        conf.setMaster("local[2]");
+        conf.setMaster("local[*]");
         Duration batchInterval = Durations.seconds(config.getLong("spark.interval"));
         JavaStreamingContext ssc = new JavaStreamingContext(conf, batchInterval);
         return ssc;
     }
+
     /**
      * kafka 参数配置 ads 主题
      *
@@ -99,67 +108,92 @@ public class BusinessTwo {
      * @param input ads: raw_sample
      */
     private void statisticsByAds(JavaPairInputDStream<String, String> input) {
-        //读取广告基本信息，filter有用字段 adgroup_id：脱敏过的广告单元 ID；customer_id:脱敏过的广告主 ID；
+        //读取广告基本信息，filter有用字段  adgroup_id：脱敏过的广告单元 ID；  customer_id:脱敏过的广告主 ID；
         JavaPairRDD<String, String> ad_featureRDD = getAd_featureHdfs().
                 mapToPair(x -> {
-//                     + "," + x.split(",")[3]
+//                    System.out.println("=====ad_featureRDD===="+  x.split(",")[0]+",  "+ x.split(",")[3]);
                     return new Tuple2<String, String>(x.split(",")[0], x.split(",")[3]);
                 });
+        ad_featureRDD.sortByKey();
+        System.out.println("============ ad_feayure =======" + ad_featureRDD.collect().size());
         /* 不推荐使用JavaPairRDD<String, String> 放入广播变量
         //广告基本信息放在广播变量中
         Broadcast<JavaPairRDD<String, String>> broadcastadFeature = ssc.sparkContext().broadcast(ad_featureRDD);*/
         //input 读入的流,处理为一个 两表join的DSteam结果流
-        JavaDStream<String> stringJavaDStream = input.mapToPair(l -> {
-//           1:adgroup_id：脱敏过的广告单元 ID； 4: noclk：为 1代表没有点击；为 0代表点击； 5:clk：为 0代表没有点击；为 1代表点击
-            return new Tuple2<String, String>(l._2().split("\\|")[1], l._2().split("\\|")[3] + "," + l._2().split("\\|")[4]);
-        }).transform(jpRDD ->  {
-                JavaPairRDD<String, Tuple2<String, String>> pairRDD = jpRDD.join(ad_featureRDD);
-                JavaRDD<String> stringJavaRDD = pairRDD.map(line -> {
-                    String returnStr = line._1() + "," + line._2()._1().split(",")[0] +"," +  line._2()._1().split(",")[1] + "," + line._2()._2();
-                    return returnStr;
+        JavaDStream<String> stringJavaDStream = input.filter(x -> x._2().split("\\|").length > 1)
+                .mapToPair(l -> {
+//           1:adgroup_id：脱敏过的广告单元 ID； 3: noclk：为 1代表没有点击；为 0代表点击； 4:clk：为 0代表没有点击；为 1代表点击
+                    return new Tuple2<String, String>(l._2().split("\\|")[1], l._2().split("\\|")[3] + "," + l._2().split("\\|")[4]);
+                }).transform(jpRDD -> {
+                    JavaPairRDD<String, Tuple2<String, String>> pairRDD = jpRDD.join(ad_featureRDD);
+                    JavaRDD<String> stringJavaRDD = pairRDD.map(line -> {
+                        String returnStr = line._1() + "," + line._2()._1().split(",")[0] + "," + line._2()._1().split(",")[1] + "," + line._2()._2();
+//                        System.out.println("=========returnStr===="+returnStr);
+                        return returnStr;
+                    });
+                    return stringJavaRDD;
                 });
-                return stringJavaRDD;
-        });
+        //=============================
+       /* //0:adgroup_id：脱敏过的广告单元 ID,  1:noclk;  2:clk; 3:customer_id:脱敏过的广告主 ID；
+        JavaDStream<String> filter = stringJavaDStream.filter(x -> x.split(",").length == 4 && x.split(",")[1].equals("0") && x.split(",")[2].equals("1"));
+//        JavaPairDStream<String, String> stringStringJavaPairDStream = filter.mapToPair(x -> new Tuple2<String, String>(x.split(",")[3], x.split(",")[0])).reduceByKey((x, y) -> (1 + 1) +"");
+        JavaPairDStream<String, Integer> stringStringJavaPairDStream =
+                filter.mapToPair(x -> new Tuple2<String, Integer>(x.split(",")[3], 1)).reduceByKey((x, y) -> 1 + 1);
+        stringStringJavaPairDStream.foreachRDD(rdd -> {
+            rdd.foreachPartition(p -> {
+                Connection conn = DBHelper.getConnection();
+                while (p.hasNext()) {
+                    if (null != p && !"".equals(p) && null != p.next()) {
+                        Tuple2<String, Integer> next = p.next();
+                        if (next!=null) {
+                            System.out.println("customer_id= " + p.next()._1() + "+++++++ count(adgroup_id)= " + p.next()._2());
+                        }
+//                        JavaDBDao.saveCustomerClickTotal(conn, Integer.parseInt(p.next()._1()), p.next()._2());
+                    }
+                }
+                conn.close();
+            });
+        });*/
+        //==============================
         //整理好的结果集，转换DataFream 用sql查询。
         stringJavaDStream.foreachRDD(rdd -> {
-            SparkSession spark = SparkSession.builder().config(rdd.context().conf()).getOrCreate();
-            JavaRDD<AdsEntry> adsEntry = rdd.map(new Function<String, AdsEntry>() {
-                @Override
-                //TODO 字段没有对应好，修改
-                public AdsEntry call(String lins) throws Exception {
+            SparkSession spark = getInstance(ssc.sparkContext().getConf());//SparkSession.builder().config(rdd.context().conf()).getOrCreate();
+            JavaRDD<AdsEntry> adsEntry = rdd.map(lins->{
                     String[] ads = lins.split(",");
-                    AdsEntry adsEntry = new AdsEntry();
+                    AdsEntry adsEnt = new AdsEntry();
 //                            adsEntry.setUser(Integer.valueOf(ads[0]));
 //                            adsEntry.setTime_stamp(Long.valueOf(ads[1]));
 //                            adsEntry.setPid(Integer.valueOf(ads[3]));
-                    adsEntry.setAdgroup_id(Integer.valueOf(ads[0]));
-                    adsEntry.setCustomer_id(Integer.valueOf(ads[1]));
-                    adsEntry.setNonclk(Integer.valueOf(ads[2]));
-                    adsEntry.setClk(Integer.valueOf(ads[3]));
+                    adsEnt.setAdgroup_id(Integer.valueOf(ads[0]));
+                    adsEnt.setCustomer_id(Integer.valueOf(ads[3]));
+                    adsEnt.setNonclk(Integer.valueOf(ads[1]));
+                    adsEnt.setClk(Integer.valueOf(ads[2]));
 
-                    return adsEntry;
-                }
+                    return adsEnt;
+
             });
             Dataset<Row> wordsDataFrame = spark.createDataFrame(adsEntry, AdsEntry.class);
             wordsDataFrame.createOrReplaceTempView("totleClick");
-            Dataset<Row> wordCountsDataFrame = spark.sql("select customer_id, count(adgroup_id) as total from totleClick group by customer_id where nonclk=0 and clk=1");
+            Dataset<Row> wordCountsDataFrame = spark.sql("select customer_id, count(adgroup_id) as total from totleClick where nonclk=0 and clk=1 group by customer_id ");
 //            System.out.printf("========= %d =========\n", time.milliseconds());
             wordCountsDataFrame.foreachPartition(rows -> {
 //                Jedis jedis = JavaRedisClient.get().getResource();
-//                Connection conn = DBHelper.getConnection();
+                Connection conn = DBHelper.getConnection();
                 rows.forEachRemaining(row -> {
                     try {
 //                        jedis.hincrBy(PV_HASHKEY, row.getString(0), row.getInt(1));
 //                        JavaDBDao.saveCustomerClickTotal(conn, Integer.parseInt(row.getString(0)),row.getInt(1));
-                        System.out.println("customer_id="+Integer.parseInt(row.getString(0))+",  count(adgroup_id)="+row.getInt(1));
+//                        System.out.println("customer_id="+Integer.parseInt(row.getString(0))+",  count(adgroup_id)="+row.getInt(1));
+                        System.out.println(row.getString(0)+row.get(1));
                     } catch (Exception e) {
                         e.printStackTrace();
                     }
                 });
-//                conn.close();
+                conn.close();
             });
         });
     }
+
     /**
      * 获取ad_feature表信息
      *
