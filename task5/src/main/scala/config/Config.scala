@@ -80,7 +80,7 @@ object Config {
   try {
     var config: PropertiesConfiguration = null
     try {
-      config = new PropertiesConfiguration("tesk5.properties")
+      config = new PropertiesConfiguration("task5.properties")
     }
     catch {
       case e: ConfigurationException => {

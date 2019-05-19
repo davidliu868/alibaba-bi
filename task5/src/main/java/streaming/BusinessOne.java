@@ -99,9 +99,9 @@ public class BusinessOne {
         input.cache();
 //        分别统计每个品牌商品类目实时浏览次数、实时被放入购物车次数、实时购买次数和 实时购买总额 ，并存入redis
         //每个商品类目实时浏览次数
-        statistics_pv(input);
+//        statistics_pv(input);
         //和实时购买总额
-//        statistics_totalPrice(input);
+        statistics_totalPrice(input);
         ssc.start();
         ssc.awaitTermination();
     }
@@ -154,19 +154,19 @@ public class BusinessOne {
         }).reduceByKey((d1,d2)->d1+d2);
         stringDoubleJavaPairDStream.foreachRDD(rdd-> {
                 rdd.foreachPartition(stringIterator-> {
-//                        Connection conn = DBHelper.getConnection();
+                        Connection conn = DBHelper.getConnection();
                         while (stringIterator.hasNext()) {
                             try {
                                 String[] split = stringIterator.next()._1().split(":");
                                 // 发送到redis，可以修改为保存到mysql
 //                                jedis.hincrBy(BUY_HASHKEY, Integer.parseInt(split[0]), Integer.parseInt(split[1]), stringIterator.next()._2());
-//                                JavaDBDao.saveCateBuyTotalPrice(conn, Integer.parseInt(split[0]), Integer.parseInt(split[1]), stringIterator.next()._2());
-                                System.out.println(Integer.parseInt(split[0])+"======"+Integer.parseInt(split[1])+"====="+stringIterator.next()._2());
+                                JavaDBDao.saveCateBuyTotalPrice(conn, Integer.parseInt(split[0]), Integer.parseInt(split[1]), stringIterator.next()._2());
+//                                System.out.println(Integer.parseInt(split[0])+"======"+Integer.parseInt(split[1])+"====="+stringIterator.next()._2());
                             } catch (Exception e) {
                                 System.out.println("error:" + e);
                             }
                         }
-//                        conn.close();
+                        conn.close();
                 });
         });
     }
@@ -188,20 +188,20 @@ public class BusinessOne {
 
         pv.foreachRDD(rdd -> {
             rdd.foreachPartition(partitions -> {
-//                Connection conn = DBHelper.getConnection();
+                Connection conn = DBHelper.getConnection();
                 while (partitions.hasNext()) {
                     try {
                         Tuple2<String, Integer> next = partitions.next();
                         // 发送到redis，可以修改为保存到mysql
 //                                jedis.hincrBy(PV_HASHKEY, pv._1(), Integer.parseInt(pv._2().toString()));
                         //cate,brand,count
-//                                JavaDBDao.savePvCountResult(conn, Integer.parseInt(next._1().split(":")[0]), Integer.parseInt(next._1.split(":")[1]), Integer.parseInt(next._2().toString()));
-                        System.out.println(next._1().split(":")[0].toString() + " === "+ next._1().split(":")[1].toString() + "======================"+Integer.parseInt(next._2().toString())+"=============");
+                                JavaDBDao.savePvCountResult(conn, Integer.parseInt(next._1().split(":")[0]), Integer.parseInt(next._1.split(":")[1]), Integer.parseInt(next._2().toString()));
+//                        System.out.println(next._1().split(":")[0].toString() + " === "+ next._1().split(":")[1].toString() + "======================"+Integer.parseInt(next._2().toString())+"=============");
                     } catch (Exception e) {
                         System.out.println("error:" + e);
                     }
                 }
-//                conn.close();
+                conn.close();
             });
         });
     }
