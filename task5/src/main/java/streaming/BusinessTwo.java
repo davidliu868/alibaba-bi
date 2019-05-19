@@ -184,7 +184,7 @@ public class BusinessTwo {
 //                        jedis.hincrBy(PV_HASHKEY, row.getString(0), row.getInt(1));
 //                        JavaDBDao.saveCustomerClickTotal(conn, Integer.parseInt(row.getString(0)),row.getInt(1));
 //                        System.out.println("customer_id="+Integer.parseInt(row.getString(0))+",  count(adgroup_id)="+row.getInt(1));
-                        System.out.println(row.getString(0)+row.get(1));
+                        System.out.println(row.getsString(0)+row.get(1));
                     } catch (Exception e) {
                         e.printStackTrace();
                     }
