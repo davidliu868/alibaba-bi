@@ -54,7 +54,6 @@ object CateRanking {
       .map(group => {
         val date = group._1
         val cateInfos = group._2
-
         var lists = List[(String, Int)]()
         for (i <- cateInfos){
           val cate = i._1 //类目
@@ -66,7 +65,6 @@ object CateRanking {
         new Tuple2[String, Iterable[(String, Int)]](date, lists)
       })
       .coalesce(10, false)
-//      .partitionBy(new HashPartitioner(20))
       .sortByKey()
 
 

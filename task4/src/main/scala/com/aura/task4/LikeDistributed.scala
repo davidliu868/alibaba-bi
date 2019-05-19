@@ -58,25 +58,15 @@ object LikeDistributed {
       val splits = s.split(",")
       (splits(0), splits(3)+","+splits(4)+","+splits(5))
     })
-
     val joinRdd = behaviorPairRdd.join(userPairRdd).map(s => {
-      // 1. userid
-      // s._1
-      // 2. 类目ID
-      // s._2._1
-      //用户属性
       val infos = s._2._2.split(",")
-      RowFactory.create(s._1, s._2._1, infos(0), infos(1), infos(2))
+      RowFactory.create(s._1, s._2._1, infos(0), infos(1), infos(2)) // userid ,类目ID,男女，年龄层次，消费档次
     })
-
     val behaviorDateset = ss.createDataFrame(joinRdd, schema)
-
     //创建本地视图
     behaviorDateset.createOrReplaceTempView("behaviors")
-
     //性别统计
     val genderCounts = ss.sql("select cateid, gender, count(1) as gendernum from behaviors group by cateid, gender ")
-
     genderCounts.foreachPartition(rows => {
       val conn = DBHelper.getConnection()
       rows.foreach(row => {
@@ -84,7 +74,6 @@ object LikeDistributed {
       })
       conn.close()
     })
-
     //年龄统计
     val ageCounts = ss.sql("select cateid, age, count(1) as agenum from behaviors group by cateid, age ")
     ageCounts.foreachPartition(rows => {
@@ -94,7 +83,6 @@ object LikeDistributed {
       })
       conn.close()
     })
-
     //消费档次统计
     val pvalueCounts = ss.sql("select cateid, pvalue, count(1) as pvaluenum from behaviors group by cateid, pvalue ")
     pvalueCounts.foreachPartition(rows => {

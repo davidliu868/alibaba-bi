@@ -42,54 +42,32 @@ object RetentionAnalysis {
     val endDateLong = string2long("2017-05-14", "yyyy-MM-dd")
 
     //1. 过滤数据，行为是浏览的，日期是给定日期之后的, 5月14之前的
-    behaviorRDD
-      .filter(_.contains("pv"))
-      .filter(s => {
+    behaviorRDD.filter(_.contains("pv")).filter(s => {
         val splits = s.split(",")
         splits(1).toInt > (startDateLong/1000) &&  splits(1).toInt< (endDateLong/1000)
-      })
-      .map(s => {
+      }).map(s => {
         val splits = s.split(",")
         (splits(3), (long2string(splits(1).toLong*1000), splits(0)))
-      })
-      .groupByKey()
-      .repartition(1000)
-      .foreachPartition( partition=> {
-        // 与hbase建立连接
-
-        val configuration = HBaseConfiguration.create()
+      }).groupByKey().foreachPartition( partition=> {
+        val configuration = HBaseConfiguration.create()// 与hbase建立连接
         configuration.set("hbase.zookeeper.quorum", "hadoop:2181")
         configuration.set("zookeeper.znode.parent", "/hbase")
-
         val connection = ConnectionFactory.createConnection(configuration)
         val table = connection.getTable(TableName.valueOf(TABLE_NAME))
-
-
         while (partition.hasNext){
           val cate = partition.next()
-
           val cateId = cate._1// 类目ID
-
-          //按日期分组
-          val dateUsers = cate._2
+          val dateUsers = cate._2//按日期分组
           val dateUsersMap = dateUsers.groupBy(_._1)
-
           dateUsersMap.keys.foreach(m => {
-
             //rowkey 日期-类目ID
             val rowKey = "%s-%06d".format(m, cateId.toInt)
-
             val put = new Put(rowKey.getBytes())
-
             //该日期m下，用户的数量
             val users = dateUsersMap(m).map(_._2).toList.distinct
             println("日期："+m+" 用户IDS:"+users.toString())
-
             put.addColumn("f1".getBytes(), "d0".getBytes(), users.size.toString.getBytes)
-
-            //进行22天循环
-
-            for (index <- 1 to 22){
+            for (index <- 1 to 22){//进行22天循环
               val indexDate = stringAddDay(m, "yyyy-MM-dd", index)
               if (dateUsersMap.contains(indexDate)){
                 val indexUsers = dateUsersMap(indexDate).map(_._2).toList.distinct

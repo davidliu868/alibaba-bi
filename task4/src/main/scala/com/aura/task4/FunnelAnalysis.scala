@@ -7,7 +7,7 @@ import org.apache.hadoop.hdfs.HdfsConfiguration
 import org.apache.spark.{SparkConf, SparkContext}
 
 /**
-  * 漏斗分析  2017-04-22 ~ 2017-05-13
+  * 漏斗分析  2017-04-22 ~ 2017-05-13  窗口期7天
   */
 object FunnelAnalysis {
 
