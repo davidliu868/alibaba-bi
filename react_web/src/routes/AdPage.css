@@ -1,0 +1,13 @@
+.container {
+    margin: 2px;
+}
+
+.title {
+    margin-top: 5px;
+    margin-bottom: 5px;
+    font-size: 20pt;
+    display: block;
+    text-align: center;
+    color: darkslategray;
+    font-weight: bold;
+}
